@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>I ran Qwen3.8-Flash-Next on Strata across three machines. Here&#x27;s what it&#x27;s actually like.</title>
+<meta name="description" content="A first-party field review: running Qwen3.8-Flash-Next on Strata across three machines, with every number traceable to a log.">
+<style>
+:root {
+  --bg: #0d1117; --panel: #161b22; --border: #30363d;
+  --fg: #e6edf3; --dim: #8b949e; --accent: #2dd4bf; --accent-dim: #14b8a6;
+  --code-bg: #1c2128;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 5rem; }
+header.hero { padding: 3rem 0 1.5rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
+header.hero h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 .5rem; }
+header.hero .sub { color: var(--dim); font-size: .95rem; }
+h1, h2, h3 { line-height: 1.3; }
+h2 { margin-top: 2.5rem; padding-top: .5rem; border-top: 1px solid var(--border); font-size: 1.45rem; }
+h3 { font-size: 1.15rem; margin-top: 1.8rem; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--border); display: block; margin: 1rem auto; }
+figure { margin: 1rem 0; }
+blockquote {
+  margin: 1.25rem 0; padding: .75rem 1rem; border-left: 3px solid var(--accent-dim);
+  background: var(--panel); border-radius: 0 8px 8px 0; color: #c9d1d9;
+}
+blockquote p { margin: .35rem 0; }
+code { background: var(--code-bg); border: 1px solid var(--border); border-radius: 5px; padding: .12em .4em; font-size: .87em; font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+pre code { background: none; border: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1.25rem 0; font-size: .92em; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: .5rem .75rem; text-align: left; }
+th { background: var(--panel); }
+tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+.toc { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.5rem; margin-bottom: 2rem; }
+.toc summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.toc ul { list-style: none; padding-left: 1rem; }
+.toc li { margin: .2rem 0; }
+.toc ul ul { font-size: .92em; color: var(--dim); }
+footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--dim); font-size: .85rem; }
+@media (max-width: 600px) { body { font-size: 15px; } .wrap { padding: 1rem .9rem 3rem; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero"><h1>I ran Qwen3.8-Flash-Next on Strata across three machines. Here&#x27;s what it&#x27;s actually like.</h1><div class="sub">First-party field review &mdash; every number traceable to a log on the machines that produced it.</div></header>
+<details class="toc" open><div class="toc">
+<ul>
+<li><a href="#i-ran-qwen38-flash-next-on-strata-across-three-machines-heres-what-its-actually-like">I ran Qwen3.8-Flash-Next on Strata across three machines. Here's what it's actually like.</a><ul>
+<li><a href="#tldr">TL;DR</a></li>
+<li><a href="#the-three-machines">The three machines</a><ul>
+<li><a href="#quick-definitions">Quick definitions</a></li>
+<li><a href="#the-models-all-qwen38-flash-next-125b-moe-strata-engine">The models (all Qwen3.8-Flash-Next, 125B MoE, Strata engine)</a></li>
+</ul>
+</li>
+<li><a href="#benchmark-1-cross-quant-engine-throughput">Benchmark 1 — Cross-quant engine throughput</a></li>
+<li><a href="#benchmark-2-the-128-gb-question-why-iq3_s-only-runs-on-yukio">Benchmark 2 — The 128 GB question: why IQ3_S only runs on yukio</a></li>
+<li><a href="#benchmark-3-the-dubai-traffic-board-game-iq3_s-on-yukio-overnight">Benchmark 3 — The Dubai Traffic board game: IQ3_S on yukio, overnight</a></li>
+<li><a href="#benchmark-4-a-real-coding-task-coder-iq1_m-vs-27b-dense">Benchmark 4 — A real coding task: Coder IQ1_M vs 27B dense</a></li>
+<li><a href="#benchmark-5-the-illustrated-guide-rebuild-iq2_xss-true-colors">Benchmark 5 — The illustrated guide rebuild: IQ2_XS's true colors</a></li>
+<li><a href="#benchmark-6-the-miller-website-coder-iq1_m-and-arabic">Benchmark 6 — The Miller website: Coder IQ1_M and Arabic</a></li>
+<li><a href="#benchmark-7-the-17-prompt-opencode-bench-a-total-failure-and-why">Benchmark 7 — The 17-prompt OpenCode bench (a total failure, and why)</a></li>
+<li><a href="#the-harness-matters-hermes-vs-opencode">The harness matters: Hermes vs OpenCode</a></li>
+<li><a href="#failure-log-everything-that-broke">Failure log (everything that broke)</a></li>
+<li><a href="#mistakes-i-made">Mistakes I made</a></li>
+<li><a href="#if-i-had-to-do-it-again-recommended-settings-per-machine">If I had to do it again — recommended settings per machine</a></li>
+<li><a href="#verdict">Verdict</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</details>
+<h1 id="i-ran-qwen38-flash-next-on-strata-across-three-machines-heres-what-its-actually-like">I ran Qwen3.8-Flash-Next on Strata across three machines. Here's what it's actually like.</h1>
+<blockquote>
+<p>A first-party field review. Every number below comes from a log, benchmark
+file, or project folder on my own machines. Where I extrapolate I mark it
+with <code>~</code>. All raw data is in <code>data/*.csv</code>; every figure is traceable to a
+source listed next to it.</p>
+</blockquote>
+<h2 id="tldr">TL;DR</h2>
+<p>Strata (v0.1.41 at benchmark time) serving <strong>Qwen3.8-Flash-Next</strong> (a 125B MoE)
+with <em>resident-experts in RAM</em> is genuinely impressive — and the right quant
+for the machine you have changes everything.</p>
+<p><strong>Ranked for agentic work and usability — speed is not the ranking:</strong></p>
+<ol>
+<li><strong>IQ3_S (yukio, 121 GiB RAM)</strong> — the best all-round agent: built an entire
+   product overnight, 9 of 10 tasks RC=0 with verified deliverables, no loops,
+   no truncation, no scaffolding needed. 44.5 tok/s token-weighted is slow for
+   a GPU model — and it still won, because it didn't fall over.</li>
+<li><strong>Qwen3.8-27B UD-Q4_K_M (any 24 GB GPU)</strong> — the most <em>reliable</em> agent of
+   everything I ran: 0 stalls, 0 loops, all 29 guide stages completed (46/52
+   first-pass, every retry recovered), delivered more than the 125B in the
+   head-to-head, and works anywhere (53–61 tok/s token-weighted on a 3090
+   Ti). If you can only run one model, run this one.</li>
+<li><strong>Coder IQ1_M (node2, 30 GB)</strong> — the fastest coder on short, clean tasks
+   (92.8 tok/s weighted; ~4.4–4.5× the 27B on the card bench, n=1) — but it is
+   a liability on mixed-script content: 3 degenerate token loops + a
+   thinking-budget-exhaustion failure in 11 Miller prompts. Fast and
+   fragile.</li>
+<li><strong>IQ2_XS (node2/Pop)</strong> — last for agentic use despite "102 tok/s" on
+   paper (30.8 token-weighted): it truncates <em>every</em> call at ~80–115 tokens,
+   so 58.5% of guide calls stalled and the whole 11-chapter guide only
+   finished inside a continuation-chaining harness.</li>
+<li><strong>IQ3_XXS (Pop, mmap fallback)</strong> — 23.9 tok/s weighted, 83 requests of
+   evidence: it works, it's slow, nothing else to recommend it for.</li>
+</ol>
+<p>The point: a model that streams fast but loops, truncates, or wedges is
+<em>useless</em> as an agent no matter its tok/s — every loop or stall costs a
+human re-launch. The Coder streams at 92.8 tok/s token-weighted yet fails 5
+of 11 mixed-script prompts; the dense 27B — a tenth of the MoE's total
+parameter count — beat the 125B's IQ2_XS on everything it was given, and
+IQ3_S at 44.5 tok/s still finished an overnight product build with zero
+degenerate loops.</p>
+<ul>
+<li><strong>IQ3_S on yukio (121 GiB RAM):</strong> the highest-quality quant I ran. It built
+  my entire Dubai Traffic board game — research, design, 81 cards, simulation,
+  website, print files — in an overnight run. <strong>9 of 10 Flash-Next tasks
+  finished RC=0 with verified deliverables</strong> (verbatim from the benchmark's
+  self-assessment); the research task first hit a context overflow — the one
+  model-side failure mode it names — and its deliverable landed after a retry.
+  The 7 logged errors/retries were environmental. This is the configuration to
+  use if you have the RAM.</li>
+<li><strong>Coder IQ1_M on node2 (30 GB):</strong> the coding pick. It beat a 27B dense model
+  by <strong>~4.4–4.5×</strong> on a real task (<strong>n=1</strong> — one run each) — but it has a
+  nasty <strong>Arabic/transliteration token-loop</strong> bug (Miller website: 3 degenerate
+  loops in 11 prompts) and a thinking-budget-exhaustion failure mode.</li>
+<li><strong>IQ2_XS on node2 (30 GB):</strong> the 2-bit base quant — the lowest-<em>quality</em>
+  tier I ran (the Coder IQ1_M has even fewer bits, but it's a different model,
+  so the tiers aren't comparable). 102 tok/s per request on paper, but only
+  <strong>30.8 tok/s token-weighted</strong> (the truncation bug skews the average), and it
+  <strong>truncates every call at ~80–115 tokens</strong>. It produced a full 11-chapter
+  illustrated guide only inside a continuation-chaining + local-validation
+  harness (58.5% of calls stalled).</li>
+</ul>
+<p><strong>Bottom line if you have 24 GB of VRAM:</strong> the VRAM card size doesn't decide
+what you can run — system RAM does. A 24 GB GPU + 30 GB RAM → Coder IQ1_M in
+low-RAM mode is the workhorse (IQ2_XS also fits, but truncates every call).
+24 GB GPU + 120+ GB RAM → IQ3_S, the best local 125B I've run. And the dense
+fallback that works almost anywhere: Qwen3.8-27B UD-Q4_K_M (16.5 GB) on
+llama.cpp with MTP speculative decoding — ~53–61 tok/s (token-weighted) on a
+3090 Ti.</p>
+<p>And the RAM is the whole game: the 79 GB IQ3_S pack <strong>only fits in yukio's
+121 GiB</strong>. It cannot run on Pop!_OS (62 GB) or node2 (30 GB) at all.</p>
+<hr />
+<h2 id="the-three-machines">The three machines</h2>
+<table>
+<thead>
+<tr>
+<th>Machine</th>
+<th>CPU</th>
+<th>GPU</th>
+<th>RAM</th>
+<th>OS</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>yukio</strong> (headless)</td>
+<td>Threadripper 3990X (64c/128t)</td>
+<td>2× Quadro RTX 5000, 16 GB each</td>
+<td><strong>121 GiB</strong></td>
+<td>Ubuntu</td>
+<td>IQ3_S — the heavy quant</td>
+</tr>
+<tr>
+<td><strong>node2</strong> (headless)</td>
+<td>Ryzen 9 5900X (12c/24t)</td>
+<td>RTX 3090, 24 GB</td>
+<td><strong>30 GB</strong></td>
+<td>Ubuntu 26.04.1</td>
+<td>IQ2_XS + Coder IQ1_M</td>
+</tr>
+<tr>
+<td><strong>Pop!_OS</strong> (desktop)</td>
+<td>Ryzen 9 5950X (16c/32t)</td>
+<td>RTX 3090 Ti, 24 GB</td>
+<td><strong>62 GB</strong></td>
+<td>Pop!_OS 24.04 + <strong>Cosmic</strong> (Wayland)</td>
+<td>27B llama.cpp baseline; IQ2_XS + IQ3_XXS on Strata</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Headless matters.</strong> node2 and yukio are headless systems — no desktop, no
+compositor, no window manager touching the GPUs. That helps two ways: all VRAM
+is available to Strata (no desktop eating 1–2 GB of the 3090's 24 GB), and
+CPU/expert-cache work runs without a compositor in the way. The desktop box is
+the opposite: the 3090 Ti is shared with the Cosmic compositor <strong>and</strong> with
+the 27B llama-server that runs my Hermes sessions. I did experience desktop
+freezes under sustained load during those runs — but I have <strong>no log of it</strong>,
+so treat that as anecdotal. Nothing in any log pins a crash on the desktop.
+(The exit -6 crash loop that looks like it belongs here actually happened on
+node2 — failure log F1.)</p>
+<h3 id="quick-definitions">Quick definitions</h3>
+<ul>
+<li><strong>Strata</strong> — an engine that runs a 125B MoE on a normal PC by keeping all
+  24,576 of the model's experts in (page-locked) system RAM and caching the
+  hot subset in GPU VRAM.</li>
+<li><strong>MTP (multi-token prediction)</strong> — the model's own draft layer proposes a
+  few next tokens; the full network verifies them in one pass, so accepted
+  tokens cost almost nothing extra.</li>
+<li><strong>spec 4</strong> — the <code>--spec 4</code> flag: MTP speculative decoding on, with a budget
+  of 4 draft tokens per step (draft head: <code>mtp-q2_0.gguf</code>, 889 MB).</li>
+<li><strong>Resident-experts</strong> — Strata reads the whole expert pack into RAM at
+  startup and page-locks it, so any expert is fetchable over PCIe with no SSD
+  read; the fallback (IQ3_XXS on Pop) maps it from disk instead.</li>
+<li><strong>Miller</strong> — the Abu Dhabi print-on-demand store (Arabic + English, RTL)
+  that was the Benchmark 6 test project.</li>
+</ul>
+<h3 id="the-models-all-qwen38-flash-next-125b-moe-strata-engine">The models (all Qwen3.8-Flash-Next, 125B MoE, Strata engine)</h3>
+<table>
+<thead>
+<tr>
+<th>Quant</th>
+<th>Size</th>
+<th>Where it fits</th>
+<th>Config</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>IQ3_S</strong></td>
+<td><strong>79 GB</strong> (52 GB + 27 GB GGUF shards)</td>
+<td><strong>yukio only</strong> (121 GiB)</td>
+<td>131072 ctx, KV int8, spec 4, MTP, resident-experts, <code>reasoning_effort=low</code>, budget 2048</td>
+</tr>
+<tr>
+<td><strong>IQ2_XS</strong></td>
+<td>68 GB (39.2 + 28.8 GB)</td>
+<td>node2 (low-RAM mode) + Pop (full residency)</td>
+<td>131072 ctx, KV int8, spec 4, MTP</td>
+</tr>
+<tr>
+<td><strong>Coder IQ1_M</strong></td>
+<td>58 GB (29.6 + 28.8 GB)</td>
+<td>node2</td>
+<td>131072 ctx, KV int8, spec 4, MTP</td>
+</tr>
+<tr>
+<td><strong>IQ3_XXS</strong></td>
+<td>2 shards (shard 1 = 47.0 GB)</td>
+<td>Pop (62 GB)</td>
+<td>ran with a mapped-host-memory (mmap) fallback; first download failed (HTTP 416, F2)</td>
+</tr>
+</tbody>
+</table>
+<p>One wording fix I owe: "IQ2_XS is the lowest quant tier" was wrong. IQ2_XS
+(2-bit) and Coder IQ1_M (1.5-bit i-quants) are <strong>different models</strong>, so their
+quant tiers don't compare on one axis. IQ2_XS is the lowest-<em>quality</em> base
+quant I ran; Coder IQ1_M has fewer bits but is a Coder fine-tune.</p>
+<p>The trick that makes any of this work at all: the experts don't fit in a GPU,
+so Strata <strong>page-locks them into resident RAM</strong> and keeps only a hot subset in
+the GPU cache. IQ2_XS on node2: 16.95 GiB experts page-locked, 3865 experts
+cached in the 3090. Coder IQ1_M: 12.66 GiB resident, 7437 cached
+(<code>data/engine_throughput.csv</code>, notes column).</p>
+<p>The first Strata install on Pop!_OS failed on the download: the setup script's
+resume path hit <code>HTTP Error 416: Range Not Satisfiable</code> seven times, wrote
+67.6 GB to disk while the server said the shard was 47.0 GB, and exited
+(<code>SETUP_EXIT=1</code>). I deleted, re-downloaded, and the model ran fine afterward
+(<code>strata_iq3_xxs.log</code> — clean generation on the 3090 Ti with the mmap
+fallback). The vision-encoder rebuild (llama.cpp submodule) was also
+interrupted twice on Pop — both times by my own Ctrl-C, not a compile error
+(F3).</p>
+<hr />
+<h2 id="benchmark-1-cross-quant-engine-throughput">Benchmark 1 — Cross-quant engine throughput</h2>
+<p>Parsed straight from the serve logs' <code>… generated in N ms (Y tok/s)</code> lines
+(<code>data/cross-quant.csv</code>). Two different decode averages are now shown:
+<strong>per-request</strong> (mean over calls — inflated by tiny calls) and
+<strong>token-weighted</strong> (total tokens ÷ total generation time — what you actually
+experience while content streams):</p>
+<table>
+<thead>
+<tr>
+<th>Quant / machine</th>
+<th>Reqs</th>
+<th>Decode per-req avg / med</th>
+<th><strong>Decode token-weighted</strong></th>
+<th>Prefill avg / med</th>
+<th>Gen tokens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>IQ3_S — yukio</strong> (2× RTX 5000, 121 GiB)</td>
+<td>1,203</td>
+<td>49.3 / 50.4</td>
+<td><strong>44.5</strong></td>
+<td>250.5 / 137.7</td>
+<td>772,658</td>
+</tr>
+<tr>
+<td><strong>IQ2_XS — node2</strong> (3090, 30 GB)</td>
+<td>4,823</td>
+<td>102.1 / 106.1</td>
+<td><strong>30.8</strong></td>
+<td>477.7 / 414.5</td>
+<td>724,983</td>
+</tr>
+<tr>
+<td><strong>Coder IQ1_M — node2</strong> (3090, 30 GB)</td>
+<td>313</td>
+<td>85.6 / 84.6</td>
+<td><strong>92.8</strong></td>
+<td>817.5 / 335.9</td>
+<td>506,382</td>
+</tr>
+<tr>
+<td><strong>IQ3_XXS — Pop</strong> (3090 Ti, mmap)</td>
+<td>83</td>
+<td>39.5 / 27.0</td>
+<td><strong>23.9</strong></td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><strong>Qwen3.8-27B — Pop</strong> (llama.cpp, UD-Q4_K_M)</td>
+<td>96 + 84</td>
+<td>54.8 / 54.8 (eval-time, per request)</td>
+<td><strong>60.7 (guide window) / 53.1 (cards window)</strong></td>
+<td>—</td>
+<td>559,700 + 94,969</td>
+</tr>
+</tbody>
+</table>
+<p>The 27B numbers come from <code>journalctl -u llama-qwen</code> <code>print_timing</code> lines,
+token-weighted by generated tokens over the two benchmark windows.</p>
+<p>Why the two IQ2_XS numbers differ 3×: <strong>69% of its 4,823 calls generated under
+100 tokens</strong> (the truncation bug, Benchmark 5) and those short calls average
+~113 tok/s, while calls over 400 tokens average ~65 tok/s. The per-request
+average is dominated by the truncated calls; the token-weighted rate is the
+honest sustained speed.</p>
+<p>Three honest readings:</p>
+<ul>
+<li><strong>The "fastest decode" headline inverts</strong> under token-weighting: Coder
+  IQ1_M (92.8) beats IQ2_XS (30.8). Long MoE generations route through more
+  diverse experts over PCIe, and the truncation bug makes IQ2_XS's per-request
+  average look great on paper. IQ2_XS is also the lowest-quality quant I ran
+  (the truncation bug is its most visible symptom).</li>
+<li><strong>yukio's IQ3_S is the slower-but-smarter tier:</strong> 49 tok/s decode
+  (33–40 tok/s during real agentic runs with reasoning on —
+  <code>dubai-traffic-game/BENCHMARK.md</code>), running a 79 GB model across two Turing
+  cards. I did not isolate why it's slower — "bandwidth-limited" was a guess
+  in an earlier draft and I'm withdrawing it as unmeasured.</li>
+<li>The <strong>Coder IQ1_M prefill average (817 tok/s)</strong> is inflated by a few huge
+  chunked-prefill windows (the log shows <code>prompt chunk auto: 8192 tokens</code>);
+  the median (336) is the more honest number.</li>
+</ul>
+<p><img alt="cross quant" src="screenshots/chart-cross-quant.png" /></p>
+<hr />
+<h2 id="benchmark-2-the-128-gb-question-why-iq3_s-only-runs-on-yukio">Benchmark 2 — The 128 GB question: why IQ3_S only runs on yukio</h2>
+<p>This is the single most important hardware finding. The IQ3_S GGUF pair is
+<strong>79 GB on disk</strong> (52 GB + 27 GB shards), and Strata's resident-experts mode
+page-locks the expert pack into RAM while the GPUs hold only a cache of it.</p>
+<table>
+<thead>
+<tr>
+<th>Machine</th>
+<th>RAM</th>
+<th>IQ3_S (79 GB)</th>
+<th>IQ2_XS (68 GB)</th>
+<th>Coder IQ1_M (58 GB)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>yukio</strong></td>
+<td><strong>121 GiB</strong></td>
+<td>✅ runs (55 GiB used at capture)</td>
+<td>✅ ran (30 reqs)</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Pop!_OS</strong></td>
+<td>62 GB</td>
+<td>❌ <strong>cannot</strong></td>
+<td>✅ ran, full residency (39 GB fits in 62 GB; clean serve, no crash in <code>strata-pop.log</code>)</td>
+<td>⚠️ smaller quants (IQ3_XXS via mmap)</td>
+</tr>
+<tr>
+<td><strong>node2</strong></td>
+<td>30 GB</td>
+<td>❌ <strong>cannot</strong> (needs 2.6× the RAM)</td>
+<td>⚠️ first full-residency attempt aborted (F1) → works in low-RAM mode (16.95 GiB resident)</td>
+<td>✅ low-RAM mode (12.66 GiB)</td>
+</tr>
+</tbody>
+</table>
+<p>So the highest-quality quant I have access to — <strong>the one that built the
+Dubai game — is literally not possible on the other two machines.</strong> On node2,
+IQ2_XS is the ceiling: it needed <em>both</em> low-RAM expert residency <em>and</em> a clear
+3090 (the first attempt died in a VRAM-abort loop, F1). On Pop!_OS the 68 GB
+IQ2_XS fits in 62 GB with headroom and ran cleanly — no low-RAM mode was ever
+needed there; low-RAM mode was node2's 30 GB workaround.</p>
+<hr />
+<h2 id="benchmark-3-the-dubai-traffic-board-game-iq3_s-on-yukio-overnight">Benchmark 3 — The Dubai Traffic board game: IQ3_S on yukio, overnight</h2>
+<p>The heaviest real task Flash-Next ever did: build <strong>Dubai Traffic</strong> — a
+DICE-style board game about commuting in Dubai — from a one-line idea to
+printable files. Everything (research, game design, card JSON, simulation,
+balance tuning, website, art direction, print PDFs) was executed by <strong>Flash
+Next IQ3_S on yukio:8080</strong> through OpenCode v1.19.0, reached from Pop via SSH
+tunnel, orchestrated by Hermes. Comparison phases re-done by Qwen3.8-27B.
+<code>data/dubai-build-phases.csv</code> (source: <code>dubai-traffic-game/BENCHMARK.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Task</th>
+<th>Wall</th>
+<th>OC runs</th>
+<th>Errors</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Research — 6 docs (roads, hubs, costs, culture, scams, community)</td>
+<td>51 m</td>
+<td>6</td>
+<td>0</td>
+<td>95 KB / 1209 lines, 111 HTTP reqs all 200, <code>[VERIFIED]</code>/<code>[ASSUMED]</code> tagged</td>
+</tr>
+<tr>
+<td>2a</td>
+<td>Game design + card JSON</td>
+<td>32 m</td>
+<td>2</td>
+<td>0</td>
+<td>13-section rules, 81 cards total, 172 i18n keys, 0 missing</td>
+</tr>
+<tr>
+<td>2b</td>
+<td>Simulation + balance tuning</td>
+<td>17 m</td>
+<td>1</td>
+<td>0</td>
+<td>sim.py (23 KB), 10 tuning iters, deterministic (identical hash on re-run); <strong>model found its own bluffer-exploit bug</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>Website</td>
+<td>19 m</td>
+<td>1</td>
+<td>0</td>
+<td>static site, 136 i18n keys, 0 leaked; picker computed a 37-min / AED 6 / karak 3 route; browser-verified</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Art direction</td>
+<td>7 m</td>
+<td>1</td>
+<td>0</td>
+<td>STYLE_GUIDE "DUSK COMMUTER POP" + 39 prompts in 5 files (generation itself failed — yukio's GPU <em>image</em> pipeline was broken, not the LLM)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Print PDFs</td>
+<td>31 m</td>
+<td>3</td>
+<td>2 (permission gates)</td>
+<td>42 KB reportlab script, 6 PDFs (board 50×35 cm vector, 21 card pages, box, 9-page rulebook, tokens, prototype); <strong>pypdf-verified 81/81 card names match cards.json</strong></td>
+</tr>
+</tbody>
+</table>
+<p><img alt="dubai phases" src="screenshots/chart-dubai-phases.png" /></p>
+<p><img alt="dubai site hero" src="screenshots/dubai-site-hero.png" />
+<em>The Flash-built website, home page.</em></p>
+<p><img alt="dubai site picker" src="screenshots/dubai-site-picker.png" />
+<em>The route picker — computed from cards.json, browser-verified.</em></p>
+<p><strong>Totals:</strong> 14 Flash-Next task files, <strong>01:30→09:08 (+04), ~7 h 38 min</strong>
+overnight. Logged errors/retries: <strong>7, all environmental</strong> (env-var not
+expanded, PATH, npm fetch hang, SearXNG off-topic results, web_extract
+blocked, the 157 s dead-tunnel "wrong API key" retry, 2× OpenCode permission
+gates). The phase table above only counts in-table errors (phase 6's two
+permission gates); the other five happened in the research/build setup before
+and between phases. Separately, BENCHMARK.md's self-assessment names one
+<strong>model-side</strong> failure mode: context overflow on unsupervised research
+("mitigated, not cured — needs <code>fit_max_tokens</code> on the server").</p>
+<p><strong>"9 of 10 tasks finished RC=0"</strong> (verbatim from the BENCHMARK.md
+self-assessment): that's the self-assessment's own count of 10 build tasks
+grouped from the 14 task files — 9 ended RC=0 with verified deliverables; the
+one that didn't is the research task that hit context overflow (the failure
+mode named in the same assessment). It was recovered with a retry; the
+deliverable landed.</p>
+<p><strong>Head-to-head on the website (Phase 3):</strong> Qwen3.8-27B did the same page in
+<strong>13 m vs Flash's 19 m (~30% faster)</strong>, and even caught a real Salik toll
+discrepancy (SZR = AED 12, not AED 6) that Flash missed. On art direction
+C1's two-ink risograph concept beat Flash's dusk-poster look. Flash-Next won
+on <strong>scale and organization</strong> (136-key i18n, per-category prompt tiers) and
+on long-task stamina — D2 (764 s), W1 (19 m), P1 (31 m) all finished without
+losing the thread.</p>
+<p><strong>The failure that <em>wasn't</em> the model:</strong> yukio's ComfyUI/Qwen-Image
+<em>diffusion</em> pipeline produced <strong>pure-noise images on 100% of outputs</strong>
+(vision-scored 1/10, even for "red circle" with an empty prompt) — a broken
+Turing/cu130 venv env on the Quadro cards. The LLM's 39 art <em>prompts</em> were
+fine; the pixels were the GPU environment's fault. (Fixed by re-rendering the
+final 33 map tiles on node2's ComfyUI: 33/33 clean.)</p>
+<p><strong>Harness bugs found (documented in <code>FAILURE-REPORT.md</code>):</strong> 6 concurrent
+<code>opencode.exe</code> runs in one workdir race OpenCode's shared XDG state → all
+fast-fail "wrong API key" (fix: serialize); Strata transient 1–2 s 401s
+(fix: retry ≤3× on fast-fail); <code>reasoning_content</code> eating small max_tokens
+(fix: <code>fit_max_tokens: true</code> in the Strata config — applied + verified).</p>
+<hr />
+<h2 id="benchmark-4-a-real-coding-task-coder-iq1_m-vs-27b-dense">Benchmark 4 — A real coding task: Coder IQ1_M vs 27B dense</h2>
+<p>Same prompt, two engines, OpenCode 1.18.35. Task: build a "Card Collection"
+section — two trading-card decks (Linux commands + computing pioneers), a
+rules doc, and a vanilla-HTML site rendering them from JSON
+(<code>data/task_card_collection.csv</code>, <code>data/card-bench-ab.csv</code>):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>Strata Coder IQ1_M</strong> (node2)</th>
+<th><strong>Qwen3.8-27B</strong> (UD-Q4_K_M, Pop)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wall (first→last event)</td>
+<td><strong>7.5 min</strong></td>
+<td>33.4 min</td>
+</tr>
+<tr>
+<td>Tool calls</td>
+<td>14</td>
+<td>32</td>
+</tr>
+<tr>
+<td>Output tokens</td>
+<td>35,497</td>
+<td>73,607</td>
+</tr>
+<tr>
+<td><strong>Cards delivered</strong></td>
+<td><strong>50</strong> (27 linux + 23 creators)</td>
+<td>56 (30 linux + 26 creators)</td>
+</tr>
+<tr>
+<td>Errors in run</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Strata-coder finished ~4.4–4.5× faster</strong> (33.4/7.5 = 4.45) with fewer tool
+calls and less than half the tokens, for a comparable 50 cards. <strong>This is
+n=1</strong> — one run each — so read it as "plausibly faster by a few ×," not a
+measured rate. (The launch-to-last-event basis in <code>card-bench-ab.csv</code> gives
+11.1 vs 37.2 min = 3.4×; the conclusion doesn't depend on the basis, but
+neither has n&gt;1.) The 27B was more thorough (more cards, more
+self-verification); the 125B MoE was dramatically faster.</p>
+<p><img alt="card bench" src="screenshots/chart-ab-cards.png" /></p>
+<p><img alt="Strata-coder site" src="screenshots/cards-strata-coder-top.png" />
+<em>Strata-coder's cards.html</em></p>
+<p><img alt="Qwen27B site" src="screenshots/cards-qwen27b-top.png" />
+<em>Qwen3.8-27B's cards.html</em></p>
+<hr />
+<h2 id="benchmark-5-the-illustrated-guide-rebuild-iq2_xss-true-colors">Benchmark 5 — The illustrated guide rebuild: IQ2_XS's true colors</h2>
+<p>Rebuild my entire "Illustrated Guide to Local AI" — 11 chapters, 11 SVG
+illustrations + PNGs + captions, a website — 100% model-generated, every call
+routed to node2. <code>data/task_illustrated_guide_rebuild.csv</code> (raw
+<code>flash-next/run-log.jsonl</code>):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>Strata Flash-Next IQ2_XS</strong></th>
+<th><strong>Qwen3.8-27B</strong> (UD-Q4_K_M)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wall</td>
+<td><strong>14.44 h</strong> (Oct 5)</td>
+<td>2.57 h (Oct 6)</td>
+</tr>
+<tr>
+<td><strong>Active (wall minus idle)</strong></td>
+<td><strong>≈ 3.8 h</strong> (one 10.6 h overnight pause = 639 min of the wall; F7)</td>
+<td>≈ 2.6 h (no significant idle gaps)</td>
+</tr>
+<tr>
+<td>Logged events</td>
+<td>2,494 = <strong>2,220 part-calls</strong> (745 ok + 1,299 stall + 89 corrected + 86 degraded + 1 empty) + 274 TOTAL markers</td>
+<td>52 stage attempts across 29 distinct stages</td>
+</tr>
+<tr>
+<td>ok</td>
+<td>745 (33.6%)</td>
+<td>46 first-pass (88.5% of attempts); all 29 stages completed</td>
+</tr>
+<tr>
+<td><strong>stall</strong></td>
+<td><strong>1,299 (58.5%)</strong></td>
+<td><strong>0 (0%)</strong></td>
+</tr>
+<tr>
+<td>corrected / degraded</td>
+<td>89 / 86</td>
+<td>6 failed attempts, all recovered by retry</td>
+</tr>
+<tr>
+<td>Deliverable</td>
+<td>11 chapters (draft+final, ~800–950 w each), 11 SVG+PNG+caption, GUIDE.md <strong>9,460 words</strong></td>
+<td>11 chapters (draft+reviewed), 11 SVG, <strong>plus 4 card decks and 3 site pages</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The 27B's "52 stages, 46 ok" needed explaining: it's <strong>attempts</strong>, not
+missing stages. 29 distinct stages were all attempted; 46 succeeded first
+pass, and the 6 failed attempts were retries — the <code>board-game</code> stage failed
+5× (succeeded on its 6th attempt) and <code>svg-ch10</code> failed once (succeeded on
+the 2nd). So nothing was missing: 6 was the retry count, and 0 stages stalled.</p>
+<p><img alt="flash-next status" src="screenshots/chart-flashnext-status.png" /></p>
+<p><strong>The finding: IQ2_XS truncates on <em>every</em> call</strong> — it stops each generation
+at ~80–115 tokens, then the stream ends with no <code>finish_reason</code> and no
+<code>[DONE]</code> (the engine log confirms it only generated that many). I reproduced
+it across max_tokens 600→8000, thinking on/off, temp 0.2/0.7/1.1, and 5
+identical prompts. Result: a ~900-word chapter is impossible in one call. I
+had to build <strong>continuation chaining</strong> — feed back only the last ~150 words
+with a "continue from exactly here" directive, reject &gt;80% word-overlap
+parts, loop to target. That's what the 58.5% "stall" rate is.</p>
+<p>Other 2-bit symptoms (all logged): phrase-lock loops in 4/11 chapters (fixed
+by a local dedupe pass); only 3/11 SVGs valid on first pass (it mangles XML
+attributes — I had to switch to a plain-text element-spec pipeline where the
+model writes specs and <em>Python assembles the XML</em>); echoed prompt placeholders
+into output; one hallucinated line. The illustration stages were the worst:
+stage4 (SVG specs) <strong>339/453 stall (74.8%)</strong>, stage4b (render) <strong>468/543
+(86.2%)</strong> (<code>data/flash-next-rollup.csv</code>).</p>
+<p>The 27B needed <strong>zero</strong> scaffolding — every stage completed, and it delivered
+more in 2.57 h active: the same guide plus 4 card decks and 3 site pages.</p>
+<p><img alt="stage words" src="screenshots/chart-flashnext-stages.png" /></p>
+<p><img alt="strata guide chapter" src="screenshots/guide-strata-chapter01.png" />
+<em>IQ2_XS chapter 1 — only possible via continuation chaining.</em></p>
+<p><img alt="strata guide website" src="screenshots/guide-strata-website.png" />
+<em>IQ2_XS's site.</em></p>
+<p><img alt="27b guide website" src="screenshots/guide-27b-website.png" />
+<em>27B's site — same brief, no scaffolding.</em></p>
+<p><img alt="guide side by side" src="screenshots/compare-side-by-side.png" />
+<em>Side by side: Strata IQ2_XS (left) vs Qwen3.8-27B (right).</em></p>
+<hr />
+<h2 id="benchmark-6-the-miller-website-coder-iq1_m-and-arabic">Benchmark 6 — The Miller website: Coder IQ1_M and Arabic</h2>
+<p>Building the Miller POD store (Arabic + English, RTL, "Abu Dhabi" in Arabic
+labels) is where Coder IQ1_M's <strong>non-Latin token-loop</strong> showed up.
+<code>data/miller-arabic-failures.csv</code> (source:
+<code>pod-concept/reports/coder-vs-27b-combined-report.md</code> +
+<code>loop-test-3models-16384.md</code>).</p>
+<p><strong>In OpenCode: 11 unique prompts, 14 attempts</strong> (three retries: p03b, p06b,
+p08r — the report's own tally line, "6 pass / 2 partial / 5 fail" = 13,
+predates the p08r re-run and doesn't match its per-prompt table, which sums
+to 7 / 2 / 5):</p>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Coder IQ1_M</th>
+<th>Failure signature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>p06b (big redesign, retry)</td>
+<td>❌ 2 m 51 s, 0 tools</td>
+<td>degenerate loop: <code>I'll use "أبو Dhabi" = "Abu Dhabi".</code> repeated to the output cap</td>
+</tr>
+<tr>
+<td>p09</td>
+<td>❌ 2 m 19 s, 0 tools</td>
+<td>degenerate loop: Cyrillic <code>раheck</code> cycle</td>
+</tr>
+<tr>
+<td>p11</td>
+<td>❌ 2 m 04 s, 0 tools</td>
+<td>degenerate loop: <code>Абу</code>/<code>Abu</code>/<code>АбуDhabi</code>/<code>AbuDhabi</code> cycle</td>
+</tr>
+<tr>
+<td>p03 (1st)</td>
+<td>❌ 3 m 09 s, 0 tools</td>
+<td>16,384 tokens all burned in <code>reasoning_content</code> → <strong>empty visible content</strong>, finish=length (thinking-budget exhaustion)</td>
+</tr>
+<tr>
+<td>p04</td>
+<td>❌ wedged 36 m</td>
+<td>model left <code>setsid bash</code> pipes open; OpenCode has no tool timeout (shared model+harness fault)</td>
+</tr>
+<tr>
+<td>p08</td>
+<td>⚠️ 14 m 35 s</td>
+<td>real work done (83,451 out tokens) then cut by output limit; 3 invalid parses (passed on the 32K-limit retry, p08r)</td>
+</tr>
+<tr>
+<td><strong>Per the report's table</strong></td>
+<td><strong>7 pass / 2 partial / 5 fail (14 attempts)</strong></td>
+<td><strong>3 degenerate token loops, 1 thinking-budget exhaustion, 1 output-limit cut, 1 wedged tool</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The report's headline "5 degenerate loops" counts the two limit/budget cuts
+(p03, p08) as loops; only <strong>p06b, p09, p11 are true token-repetition loops</strong>.
+0 repeated identical tool calls on either side.</p>
+<p><strong>The 27B ran the identical 11 prompts (13 attempts incl. p03b/p06b): 10
+pass / 1 asked-a-question / 2 fail — 0 loops.</strong> Its only 2 failures were
+60-minute orchestrator caps while genuinely still working (real brand PNGs,
+background removal, i18n in progress at the cap both times). The loops are a
+<strong>Coder-model artifact on Arabic↔Latin/Cyrillic transliteration</strong>, not a
+prompt or harness issue. One caveat: no higher-quant Coder exists, so I can't
+separate the loop from the IQ1_M quant — the 27B comparison isolates the
+<em>model</em>, not the <em>quant</em>.</p>
+<p><strong>Root-caused with a controlled raw-API test</strong> (identical short prompt:
+delivery labels for Abu Dhabi/Dubai in Cyrillic + Latin, max_tokens 16,384):</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coder, thinking <strong>ON</strong> (default high)</td>
+<td><strong>2/5 clean, 3/5 FAIL</strong> — 16,384 tokens all in <code>reasoning_content</code>, empty content, finish=length</td>
+</tr>
+<tr>
+<td>Coder, thinking <strong>OFF</strong> (<code>reasoning_effort=none</code>)</td>
+<td><strong>5/5 clean</strong> in 0.2–0.9 s</td>
+</tr>
+<tr>
+<td>IQ2_XS, thinking on</td>
+<td>5/5 clean (0.3–1.2 s)</td>
+</tr>
+<tr>
+<td>27B, thinking on</td>
+<td>5/5 clean (9–29 s)</td>
+</tr>
+</tbody>
+</table>
+<p>So two distinct Coder failure modes, both reproduced: <strong>(a) thinking-budget
+exhaustion</strong> — high thinking runs unbounded at the cap and returns empty
+content (fix: <code>reasoning_effort=none</code> or a small <code>reasoning_budget_tokens</code>);
+<strong>(b) the OpenCode transliteration loops</strong> — token <em>repetition</em> in visible
+content on mixed-script text, non-deterministic. Penalty params did not
+suppress them <em>in my small tests</em> (repetition_penalty 1.3, presence/frequency
+1.0, even temperature 0) — but that's 3–5 runs per condition, too few to
+declare them hopeless; I'm reporting "not fixed in a small test," not "cannot
+be fixed." The practical rule that came out of it: <strong>don't point the Coder
+build at Arabic/RTL content</strong> — use IQ3_S or the 27B for that.</p>
+<hr />
+<h2 id="benchmark-7-the-17-prompt-opencode-bench-a-total-failure-and-why">Benchmark 7 — The 17-prompt OpenCode bench (a total failure, and why)</h2>
+<p>Standard 17-prompt harness against Coder IQ1_M on node2. <strong>All 17 prompts
+failed instantly</strong> (<code>data/opencode-bench-17.csv</code>, <code>data/task_17prompt_bench.csv</code>):
+every prompt <code>exit_code=1</code>, 5.6–6.0 s, <strong>0 tool calls, 0 steps, 0 output
+tokens, 0 new files</strong>, error <code>Unexpected server error</code>. Not a model result —
+an infrastructure one: the node2 coder log at that window shows repeated
+<code>native head upload: out of memory (24 MiB of 24124 MiB VRAM free)</code> and
+<code>mtp: buffers do not fit</code>. The 3090 was <strong>occupied by another GPU workload</strong>,
+so Strata couldn't even allocate its MTP buffers. Lesson I'll keep: on a
+shared 3090, run one GPU-heavy thing at a time — Strata holds ~21.8–23.7 GB
+loaded.</p>
+<hr />
+<h2 id="the-harness-matters-hermes-vs-opencode">The harness matters: Hermes vs OpenCode</h2>
+<p>Same models, two different ways to drive them. The difference showed up in
+the failures, not the successes:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>OpenCode</strong> (<code>opencode run --format json</code>)</th>
+<th><strong>Hermes</strong> (me, orchestrating)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Silence</strong></td>
+<td>Silent until the task ends. 27B p01 ran <strong>46 m 15 s</strong> (96 tool calls) and p04 <strong>32 m 09 s</strong> with zero intermediate output — I was polling a black box. A 157 s "missing or wrong API key" outage turned out (MITM-verified) to be the client retrying a <em>dead tunnel socket</em>; <strong>zero 401s ever reached Strata</strong></td>
+<td>Narrates every step; I could watch the research chain land doc by doc and kill/steer mid-run</td>
+</tr>
+<tr>
+<td><strong>Loops &amp; wedges</strong></td>
+<td>No tool timeout: p04 was wedged <strong>36 min</strong> after the model left <code>setsid bash</code> pipes open — only SIGTERM freed it. 6 concurrent runs race shared XDG state → all fast-fail "wrong API key"</td>
+<td>I serialized the research chain <em>after</em> the first race (my mistake, below), and built a MITM proxy to catch the 157 s incident in the act</td>
+</tr>
+<tr>
+<td><strong>Recovery</strong></td>
+<td>60-minute orchestrator cap SIGTERMs long tasks (27B p06/p06b died at the cap while still mid-work); recovery = re-launch from scratch</td>
+<td>I verified every gate myself (pypdf 81/81 card names, DOM smoke tests, real-browser picker check) and wrote the scaffolding the models needed: continuation chaining, the dedupe pass, the element-spec SVG pipeline — that was the orchestrator, not the model</td>
+</tr>
+</tbody>
+</table>
+<p>The degenerate token loops (Benchmark 6) were <strong>model-side</strong>, not harness-side.
+What's harness-side: the XDG concurrency race, the dead-tunnel retry with no
+error context, the missing tool timeout, and the hard 60-min cap. A silent
+harness makes all four of those <em>invisible</em> until the task fails — which is
+exactly why the 27B's 46-minute runs felt like the machine had frozen.</p>
+<hr />
+<h2 id="failure-log-everything-that-broke">Failure log (everything that broke)</h2>
+<p><code>data/failures.csv</code> (12 entries), abridged:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>What</th>
+<th>Root cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td><strong>node2</strong> IQ2_XS serve aborted in a loop (exit -6, SIGABRT; "26 MiB of 24124 MiB VRAM free — LOW"); requests returned 0 tokens</td>
+<td>The crash log (<code>strata_cardbuild.log</code>) advertises <strong>node2's IP (192.168.77.2)</strong> — an earlier draft wrongly attributed it to Pop/Cosmic. It was a <strong>VRAM exhaustion on node2's shared 3090</strong>, consistent with F11 (orphan engine PIDs holding 15.2 GiB after stop); the 39 GB page-lock also exceeded 30 GB RAM</td>
+<td>Killed orphans; one GPU-heavy workload at a time; low-RAM mode (16.95 GiB resident). Pop's own Strata logs show clean runs, no crash</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>IQ3_XXS download on Pop failed: <code>HTTP 416</code>, 67.6 GB written but server shard is 47.0 GB</td>
+<td>setup-script resume wrote past the real file size</td>
+<td>delete + re-download; <strong>it then ran fine on Pop</strong> (mmap fallback, 23.9 tok/s token-weighted)</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>Strata vision rebuild (llama.cpp submodule) interrupted twice on Pop</td>
+<td>my Ctrl-C, not a compile error</td>
+<td>build resumed + completed</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>17-prompt bench 17/17 fail (Benchmark 7)</td>
+<td>GPU occupied by another workload (24 MiB VRAM free)</td>
+<td>re-run when the 3090 is clear; one GPU-heavy thing at a time</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>27B bench: p06 + p06b hit the 60-min orchestrator cap (SIGTERM)</td>
+<td>long task exceeds 60 min at 27B speed</td>
+<td>cap is by design (policy, not model)</td>
+</tr>
+<tr>
+<td>F6</td>
+<td>Illustrated-Guide: 58.5% of calls stalled at ~80–115 tokens</td>
+<td>IQ2_XS per-call truncation (Benchmark 5)</td>
+<td>continuation chaining + local validation; quant choice is the real fix</td>
+</tr>
+<tr>
+<td>F7</td>
+<td>639-min gap in guide run-log</td>
+<td>overnight pipeline pause, not a hang</td>
+<td>flagged for transparency; active time reported alongside wall</td>
+</tr>
+<tr>
+<td>F8</td>
+<td>"Grep loop" incident (30+ identical tool calls, nothing built)</td>
+<td><strong>I reported it</strong> in the moment; <strong>UNVERIFIED</strong> — no artifact located afterward</td>
+<td>left marked unverified</td>
+</tr>
+<tr>
+<td>F9</td>
+<td>Dubai build: 6 concurrent <code>opencode.exe</code> in one workdir all fast-fail "wrong API key"</td>
+<td>OpenCode XDG state race</td>
+<td>serialize runs; retry ≤3×; <code>fit_max_tokens: true</code> (applied + verified)</td>
+</tr>
+<tr>
+<td>F10</td>
+<td>Dubai build: all 39 Qwen-Image generations = pure noise (100%)</td>
+<td>yukio ComfyUI/venv broken on Turing GPUs (env, not model)</td>
+<td>re-rendered final tiles on node2 ComfyUI: 33/33 clean</td>
+</tr>
+<tr>
+<td>F11</td>
+<td>Strata VRAM not released after <code>systemctl stop</code> on node2 (15,226 MiB held)</td>
+<td>orphan engine PIDs</td>
+<td>killed orphans → VRAM freed</td>
+</tr>
+<tr>
+<td>F12</td>
+<td>Coder Arabic transliteration loops + thinking-budget exhaustion (Benchmark 6)</td>
+<td>model artifact on mixed-script text; penalties not fixed in small tests</td>
+<td>route Arabic work to IQ3_S/27B; <code>reasoning_effort=none</code> for short deterministic calls</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="mistakes-i-made">Mistakes I made</h2>
+<ol>
+<li><strong>Misattributed node2's OOM to Pop</strong> (earlier draft of this article): the
+   crash log advertises node2's IP; Pop's logs are clean. Fixed above.</li>
+<li><strong>Reported per-request tok/s as the headline decode speed</strong> — IQ2_XS looked
+   "fastest at 102 tok/s" until token-weighting (30.8) exposed that the
+   truncation bug's tiny calls were inflating the average.</li>
+<li><strong>Launched 6 OpenCode research tasks concurrently</strong> on day one → the XDG
+   race that ate an hour as "wrong API key." Serializing would have been the
+   first move, not the recovery move.</li>
+<li><strong>Left orphan Strata engine PIDs holding 15.2 GiB of VRAM</strong> on node2 after
+   a <code>systemctl stop</code> (F11) — the same GPU then aborted the next serve with
+   "26 MiB VRAM free" (F1). One <code>nvidia-smi</code> check after every stop would
+   have prevented it.</li>
+<li><strong>Set <code>limit.output=16384</code> without a thinking budget</strong> — Coder burned the
+   whole budget in <code>reasoning_content</code> and returned an empty answer (p03).</li>
+<li><strong>Let the Strata guide pipeline sit overnight</strong> (639 min) with no watchdog
+   (F7) — that's 10.6 h of the 14.44 h "wall" that made the run look
+   slower than it was.</li>
+<li><strong>Ran the 17-prompt bench on a 3090 another workload was occupying</strong> (F4)
+   — 17/17 failed in 5.6 s. A pre-flight <code>nvidia-smi</code> would have shown it.</li>
+<li><strong>Trusted the setup script's download resume</strong> — it wrote 67.6 GB of
+   garbage instead of the 47 GB shard (HTTP 416) and only my byte-count check
+   caught it.</li>
+</ol>
+<hr />
+<h2 id="if-i-had-to-do-it-again-recommended-settings-per-machine">If I had to do it again — recommended settings per machine</h2>
+<table>
+<thead>
+<tr>
+<th>Machine</th>
+<th>What to run</th>
+<th>Key settings</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>yukio</strong> (121 GiB, 2× RTX 5000, headless)</td>
+<td><strong>IQ3_S (79 GB)</strong></td>
+<td>full residency, <code>--spec 4 --mtp</code>, KV int8, 131K ctx, <code>reasoning_effort=low</code>, budget 2048</td>
+<td>the only machine that fits the top quant; the overnight Dubai build proves the workload</td>
+</tr>
+<tr>
+<td><strong>node2</strong> (30 GB, 3090, headless)</td>
+<td><strong>Coder IQ1_M (58 GB)</strong> for coding; IQ2_XS only with scaffolding</td>
+<td><strong>low-RAM mode</strong> (≤17 GiB resident), <code>--spec 4 --mtp</code>, KV int8; one GPU workload at a time; check <code>nvidia-smi</code> after every stop; <code>reasoning_effort=none</code> for short deterministic calls; keep it away from Arabic/RTL</td>
+<td>VRAM and RAM are both tight; the truncation bug (IQ2_XS) and the token loops (Coder) set the workload boundaries</td>
+</tr>
+<tr>
+<td><strong>Pop!_OS</strong> (62 GB, 3090 Ti, Cosmic)</td>
+<td><strong>Qwen3.8-27B UD-Q4_K_M</strong> (llama.cpp) as the default; IQ2_XS (full residency) or IQ3_XXS (mmap) on Strata when you want the MoE</td>
+<td>27B: <code>-ngl all -c 131072 --cache-type-k v q4_0 --spec-type draft-mtp --spec-draft-n-max 2</code>; don't co-locate Strata and the 27B on the 3090 Ti at the same time</td>
+<td>62 GB holds 68 GB IQ2_XS comfortably; the 79 GB IQ3_S never fits; the shared GPU is the constraint</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="verdict">Verdict</h2>
+<p><strong>Strata + Qwen3.8-Flash-Next is a real, fast, local 125B MoE</strong> — and the
+resident-RAM-experts design plus the <em>machine you put it on</em> decide what you
+get:</p>
+<ul>
+<li><strong>yukio + 121 GiB + IQ3_S is the flagship.</strong> The only machine that can run
+  the top quant at all, and it did an entire product build (Dubai Traffic)
+  overnight with no task-ending model failures. Slower per-token (49 tok/s)
+  but the highest quality, and headless hardware keeps it clean.</li>
+<li><strong>node2 + Coder IQ1_M is the coding workhorse</strong> — ~4.4–4.5× faster than a
+  27B on a real task (<strong>n=1</strong>) — but it is the <em>less reliable</em> model of the
+  two on the Miller workload: 5 hard fails out of 11 prompts (3 token loops,
+  1 thinking-budget exhaustion, 1 wedged tool call) vs the 27B's 2 fails out
+  of 13 (both 60-min caps while still working). Keep it away from Arabic/RTL
+  content and set <code>reasoning_effort=none</code> for short deterministic calls.</li>
+<li><strong>IQ2_XS is a fast-drafting prose engine, not a finisher</strong> — 102 tok/s
+  per-request, 30.8 token-weighted, and per-call truncation at ~100 tokens
+  means it needs continuation scaffolding. I'd take the Coder or the IQ3_S
+  over it.</li>
+<li><strong>The desktop is for the 27B, not the MoE.</strong> 62 GB can't hold the 79 GB
+  pack; the 3090 Ti is shared with the compositor and the 27B server. Headless
+  node2/yukio are why this cluster works at all. (I did see the desktop
+  freeze under sustained load — anecdotal, unlogged — but the one crash loop
+  I can prove was on node2, not Pop.)</li>
+</ul>
+<p>Full reproducibility: raw CSVs in <code>data/</code>, source logs cited per figure,
+screenshots in <code>screenshots/</code>.</p>
+<hr />
+<p><em>Data sources (all on-disk, verifiable): <code>data/cross-quant.csv</code>,
+<code>data/engine_throughput.csv</code>, <code>data/dubai-build-phases.csv</code>,
+<code>data/miller-arabic-failures.csv</code>, <code>data/task_card_collection.csv</code>,
+<code>data/card-bench-ab.csv</code>, <code>data/task_illustrated_guide_rebuild.csv</code>,
+<code>data/opencode-bench-17.csv</code>, <code>data/task_17prompt_bench.csv</code>,
+<code>data/failures.csv</code>, <code>data/hardware-versions.csv</code>,
+<code>data/flash-next-rollup.csv</code>, <code>data/flash-next-stages.csv</code>.</em></p>
+<footer>Built from the project&rsquo;s source data &middot; raw data in <code>data/*.csv</code> in the source repository</footer>
+</div>
+</body>
+</html>
